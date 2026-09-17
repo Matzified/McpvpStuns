@@ -4,7 +4,6 @@ import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.AxeItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
@@ -21,10 +20,11 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Replicates 1:1 mcpvp.club shield stun & knockback mechanics on Fabric:
- * 1. Skips damage tick (invulnerability / hurtResistantTime) when damage is blocked by shield.
- * 2. When shield is broken by an axe, suppresses velocity from the break hit and sets invulnerability ticks to 0.
- * 3. When attacker lands follow-up hit within the 1-tick / 600ms combo window, delivers full knockback and damage.
+ * Replicates 1:1 mcpvp.club shield stun & follow-up launch knockback on Fabric:
+ * 1. Cancels invulnerability frames on shield block and axe break so the follow-up hit connects on tick 1.
+ * 2. When shield breaks, suppresses knockback so the target stays locked in front.
+ * 3. On the follow-up hit, launches the defender into the air.
+ * 4. Silent operation (no artificial sound effects).
  */
 @Mixin(LivingEntity.class)
 public abstract class LivingEntityShieldStunMixin extends Entity {
@@ -39,22 +39,14 @@ public abstract class LivingEntityShieldStunMixin extends Entity {
     private static final Map<UUID, Long> LAST_SHIELD_BREAK = new ConcurrentHashMap<>();
     private static final Map<UUID, UUID> SHIELD_BREAK_ATTACKER = new ConcurrentHashMap<>();
 
-    /**
-     * Skip vanilla damage tick / invulnerability when damage is blocked with shield.
-     * Equivalent to Paper's skip-vanilla-damage-tick-when-shield-blocked.
-     */
     @Inject(method = "blockUsingShield", at = @At("TAIL"))
     protected void onBlockUsingShield(LivingEntity attacker, CallbackInfo ci) {
         LivingEntity self = (LivingEntity) (Object) this;
-        // Clear invulnerability frames immediately
         self.invulnerableTime = 0;
         self.hurtDuration = 0;
         self.hurtTime = 0;
     }
 
-    /**
-     * Intercept hurt / damage processing to handle the shield break and follow-up knockback timing.
-     */
     @Inject(method = "hurt", at = @At("HEAD"))
     private void onHurt(DamageSource source, float amount, CallbackInfoReturnable<Boolean> cir) {
         LivingEntity self = (LivingEntity) (Object) this;
@@ -65,44 +57,52 @@ public abstract class LivingEntityShieldStunMixin extends Entity {
             Long breakTime = LAST_SHIELD_BREAK.get(self.getUUID());
             UUID breakAttackerId = SHIELD_BREAK_ATTACKER.get(self.getUUID());
 
-            // Check if this is the instant 1-tick follow-up hit after shield was broken
-            if (breakTime != null && (now - breakTime) <= 600 && attacker.getUUID().equals(breakAttackerId)) {
-                // Remove record and ensure target takes the hit without any i-frame block
+            // Check if this is the follow-up hit after shield was broken
+            if (breakTime != null && (now - breakTime) <= 1200 && attacker.getUUID().equals(breakAttackerId)) {
                 LAST_SHIELD_BREAK.remove(self.getUUID());
                 SHIELD_BREAK_ATTACKER.remove(self.getUUID());
+
+                // Clear i-frames completely so follow-up connects
                 self.invulnerableTime = 0;
+
+                // Launch target up in the air
+                Vec3 attackerPos = attacker.position();
+                Vec3 targetPos = self.position();
+                Vec3 dir = new Vec3(targetPos.x - attackerPos.x, 0, targetPos.z - attackerPos.z);
+                if (dir.lengthSqr() > 1.0E-4) {
+                    dir = dir.normalize();
+                } else {
+                    dir = attacker.getLookAngle();
+                    dir = new Vec3(dir.x, 0, dir.z).normalize();
+                }
+
+                // Vertical launch 0.44 upwards + horizontal knockback
+                self.setDeltaMovement(dir.x * 0.45, 0.44, dir.z * 0.45);
+                self.hurtMarked = true;
                 return;
             }
 
-            // Check if this hit is breaking the shield
+            // Check if this hit is breaking the shield with an axe
             if (self.isBlocking()) {
+                self.invulnerableTime = 0;
                 ItemStack held = attacker.getMainHandItem();
                 if (held != null && held.getItem() instanceof AxeItem) {
-                    // Axe hit on blocking shield: record shield break!
                     LAST_SHIELD_BREAK.put(self.getUUID(), now);
                     SHIELD_BREAK_ATTACKER.put(self.getUUID(), attacker.getUUID());
-
-                    // Clear invulnerability on shield break so follow-up can register on next tick
                     self.invulnerableTime = 0;
                 }
             }
         }
     }
 
-    /**
-     * Apply knockback only on the follow-up hit, not during the shield breaking strike itself.
-     */
     @Inject(method = "knockback", at = @At("HEAD"), cancellable = true)
     private void onKnockback(double strength, double x, double z, CallbackInfo ci) {
         LivingEntity self = (LivingEntity) (Object) this;
         Long breakTime = LAST_SHIELD_BREAK.get(self.getUUID());
 
-        if (breakTime != null) {
-            long diff = System.currentTimeMillis() - breakTime;
-            // If the knockback is triggered during the shield break (within 50ms), cancel/suppress it
-            if (diff < 50) {
-                ci.cancel();
-            }
+        // Cancel knockback only from the shield breaking strike itself
+        if (breakTime != null && (System.currentTimeMillis() - breakTime) < 80) {
+            ci.cancel();
         }
     }
 }

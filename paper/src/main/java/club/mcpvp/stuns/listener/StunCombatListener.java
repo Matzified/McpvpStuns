@@ -4,7 +4,6 @@ import club.mcpvp.stuns.McPvpStuns;
 import io.papermc.paper.event.player.PlayerShieldDisableEvent;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
-import org.bukkit.Sound;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
@@ -24,7 +23,11 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Combat listener handling 1:1 mcpvp.club stun & 1-tick knockback mechanics.
+ * Combat listener replicating exact mcpvp.club shield stun & follow-up knockback mechanics:
+ * 1. Cancels invulnerability frames on shield block and axe break so the follow-up hit connects on tick 1.
+ * 2. When shield breaks, suppresses horizontal knockback so the target stays locked in front of the attacker.
+ * 3. On the follow-up hit (e.g. mace or sword), launches the target directly into the air with vertical knockback.
+ * 4. Silent operation (no artificial sound effects).
  */
 public final class StunCombatListener implements Listener {
 
@@ -46,7 +49,7 @@ public final class StunCombatListener implements Listener {
         this.plugin = Objects.requireNonNull(plugin, "plugin");
     }
 
-    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    @EventHandler(priority = EventPriority.LOWEST)
     public void onShieldDisable(PlayerShieldDisableEvent event) {
         if (!plugin.getConfig().getBoolean("runtime-stun-override", true)) {
             return;
@@ -56,21 +59,37 @@ public final class StunCombatListener implements Listener {
         int cooldownTicks = Math.max(0, plugin.getConfig().getInt("shield-cooldown-ticks", 100));
         event.setCooldown(cooldownTicks);
 
-        if (plugin.getConfig().getBoolean("reset-invulnerability-on-break", true)) {
-            // Immediate zeroing of invulnerability frames on the next tick
-            Bukkit.getScheduler().runTask(plugin, () -> {
-                if (defender.isValid()) {
-                    defender.setNoDamageTicks(0);
-                }
-            });
+        // Instantly eliminate i-frames so the follow-up hit on tick 1 connects
+        defender.setNoDamageTicks(0);
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            if (defender.isValid()) {
+                defender.setNoDamageTicks(0);
+            }
+        });
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST)
+    public void onEntityDamagePre(EntityDamageByEntityEvent event) {
+        if (!plugin.getConfig().getBoolean("runtime-stun-override", true)) {
+            return;
         }
 
-        if (plugin.getConfig().getBoolean("play-stun-sound", true)) {
-            defender.getWorld().playSound(defender.getLocation(), Sound.ITEM_SHIELD_BREAK, 1.0F, 0.9F);
+        if (!(event.getEntity() instanceof Player defender)) {
+            return;
+        }
+
+        Entity rawDamager = event.getDamager();
+        if (!(rawDamager instanceof LivingEntity attacker)) {
+            return;
+        }
+
+        // Always ensure no damage ticks are blocking hits if defender is shielding or recently stunned
+        if (defender.isBlocking() || activeStuns.containsKey(defender.getUniqueId())) {
+            defender.setNoDamageTicks(0);
         }
     }
 
-    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
     public void onEntityDamageByEntity(EntityDamageByEntityEvent event) {
         if (!plugin.getConfig().getBoolean("runtime-stun-override", true)) {
             return;
@@ -86,40 +105,45 @@ public final class StunCombatListener implements Listener {
         }
 
         long now = System.currentTimeMillis();
-        long windowMs = plugin.getConfig().getLong("followup-window-ms", 600L);
+        long windowMs = plugin.getConfig().getLong("followup-window-ms", 1200L);
 
-        // Case 1: Follow-up hit landed after shield break
+        // Case 1: Follow-up hit after shield was broken
         StunRecord record = activeStuns.get(defender.getUniqueId());
         if (record != null && (now - record.breakTimeMillis()) <= windowMs && record.attackerId().equals(attacker.getUniqueId())) {
             activeStuns.remove(defender.getUniqueId());
 
-            if (plugin.getConfig().getBoolean("reset-invulnerability-on-break", true)) {
-                defender.setNoDamageTicks(0);
+            // If vanilla cancelled or swallowed this hit due to damage ticks, uncancel it!
+            if (event.isCancelled()) {
+                event.setCancelled(false);
             }
 
-            if (plugin.getConfig().getBoolean("play-slam-sound", true)) {
-                defender.getWorld().playSound(defender.getLocation(), Sound.ENTITY_PLAYER_ATTACK_CRIT, 1.2F, 1.1F);
-            }
+            defender.setNoDamageTicks(0);
 
+            // Launch the player up in the air with strong follow-up knockback
             double hMult = plugin.getConfig().getDouble("followup-knockback-horizontal-multiplier", 1.0D);
             double vMult = plugin.getConfig().getDouble("followup-knockback-vertical-multiplier", 1.0D);
 
-            if (hMult != 1.0D || vMult != 1.0D) {
-                Bukkit.getScheduler().runTask(plugin, () -> {
-                    if (!defender.isValid() || !attacker.isValid()) return;
-                    Vector dir = defender.getLocation().toVector().subtract(attacker.getLocation().toVector()).setY(0);
-                    if (dir.lengthSquared() > 1.0E-4D) {
-                        dir.normalize();
-                        defender.setVelocity(new Vector(dir.getX() * 0.4D * hMult, 0.35D * vMult, dir.getZ() * 0.4D * hMult));
-                    }
-                });
-            }
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                if (!defender.isValid() || !attacker.isValid()) return;
+
+                Vector dir = defender.getLocation().toVector().subtract(attacker.getLocation().toVector());
+                dir.setY(0);
+                if (dir.lengthSquared() > 1.0E-4D) {
+                    dir.normalize();
+                } else {
+                    dir = attacker.getLocation().getDirection().setY(0).normalize();
+                }
+
+                // Vertical launch (0.42 upwards = lifts opponent into the air) + horizontal momentum
+                Vector launch = new Vector(dir.getX() * 0.45D * hMult, 0.44D * vMult, dir.getZ() * 0.45D * hMult);
+                defender.setVelocity(launch);
+            });
             return;
         }
 
-        // Case 2: Axe strike against active shield
+        // Case 2: Axe hitting a blocking shield
         if (defender.isBlocking()) {
-            // Cancel vanilla i-frames on block so rapid follow-ups register
+            defender.setNoDamageTicks(0);
             Bukkit.getScheduler().runTask(plugin, () -> {
                 if (defender.isValid()) {
                     defender.setNoDamageTicks(0);
@@ -132,22 +156,16 @@ public final class StunCombatListener implements Listener {
             if (held != null && AXE_MATERIALS.contains(held.getType())) {
                 activeStuns.put(defender.getUniqueId(), new StunRecord(attacker.getUniqueId(), now));
 
-                // Cancel knockback on the shield-breaking strike itself so target stays in range
+                // Suppress knockback on the shield break strike itself so target stays locked in front
                 if (plugin.getConfig().getBoolean("knockback-on-followup-only", true)) {
-                    Vector currentVel = defender.getVelocity().clone();
                     Bukkit.getScheduler().runTask(plugin, () -> {
                         if (defender.isValid()) {
-                            defender.setVelocity(new Vector(currentVel.getX() * 0.05D, currentVel.getY(), currentVel.getZ() * 0.05D));
+                            Vector v = defender.getVelocity();
+                            defender.setVelocity(new Vector(0, v.getY() < 0 ? v.getY() : 0, 0));
                         }
                     });
                 }
             }
         }
-    }
-
-    public void cleanExpiredStuns() {
-        long now = System.currentTimeMillis();
-        long windowMs = plugin.getConfig().getLong("followup-window-ms", 600L);
-        activeStuns.entrySet().removeIf(entry -> (now - entry.getValue().breakTimeMillis()) > windowMs * 2);
     }
 }
