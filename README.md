@@ -1,9 +1,13 @@
-# 🛡️ McPvpStuns
+<p align="center">
+  <img src="logo.png" alt="McPvpStuns Logo" width="550" />
+</p>
 
-![Minecraft](https://img.shields.io/badge/Minecraft-1.21%2B%20%7C%2026.1-brightgreen?style=for-the-badge)
-![Platform](https://img.shields.io/badge/Platform-Paper%20%7C%20Purpur%20%7C%20Fabric-007acc?style=for-the-badge)
-![Java](https://img.shields.io/badge/Java-21--25-orange?style=for-the-badge)
-![License](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)
+<p align="center">
+  <a href="https://github.com/Matzified/McpvpStuns"><img src="https://img.shields.io/badge/Minecraft-1.21%2B%20%7C%2026.1-brightgreen?style=for-the-badge" alt="Minecraft Version"></a>
+  <a href="https://github.com/Matzified/McpvpStuns"><img src="https://img.shields.io/badge/Platform-Paper%20%7C%20Purpur%20%7C%20Fabric-007acc?style=for-the-badge" alt="Platforms"></a>
+  <a href="https://github.com/Matzified/McpvpStuns"><img src="https://img.shields.io/badge/Java-21--25-orange?style=for-the-badge" alt="Java Version"></a>
+  <a href="https://github.com/Matzified/McpvpStuns/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge" alt="License"></a>
+</p>
 
 **McPvpStuns** brings **mcpvp.club** shield stun and 1-tick stun-slam mechanics to Paper servers and Fabric setups. It automatically toggles Paper's `skip-vanilla-damage-tick-when-shield-blocked` setting on startup and removes the default 10-tick damage immunity window when a shield gets disabled, allowing instant axe-to-mace follow-up hits and clean knockback.
 
