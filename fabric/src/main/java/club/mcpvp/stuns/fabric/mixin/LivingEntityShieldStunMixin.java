@@ -76,8 +76,8 @@ public abstract class LivingEntityShieldStunMixin extends Entity {
                     dir = new Vec3(dir.x, 0, dir.z).normalize();
                 }
 
-                // Vertical launch 0.44 upwards + horizontal knockback
-                self.setDeltaMovement(dir.x * 0.45, 0.44, dir.z * 0.45);
+                // Calibrated for stun-web combo: max ~1 block horizontal back and ~1.5 blocks vertical lift
+                self.setDeltaMovement(dir.x * 0.28, 0.38, dir.z * 0.28);
                 self.hurtMarked = true;
                 return;
             }

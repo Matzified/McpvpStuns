@@ -134,8 +134,8 @@ public final class StunCombatListener implements Listener {
                     dir = attacker.getLocation().getDirection().setY(0).normalize();
                 }
 
-                // Vertical launch (0.42 upwards = lifts opponent into the air) + horizontal momentum
-                Vector launch = new Vector(dir.getX() * 0.45D * hMult, 0.44D * vMult, dir.getZ() * 0.45D * hMult);
+                // Calibrated for stun-web combo: max ~1 block horizontal back and ~1.5 blocks vertical lift
+                Vector launch = new Vector(dir.getX() * 0.28D * hMult, 0.38D * vMult, dir.getZ() * 0.28D * hMult);
                 defender.setVelocity(launch);
             });
             return;
