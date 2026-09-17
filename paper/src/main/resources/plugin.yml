@@ -1,0 +1,16 @@
+name: McPvpStuns
+version: '1.0.0'
+main: club.mcpvp.stuns.McPvpStuns
+api-version: '1.21'
+load: STARTUP
+author: PoggerCity
+description: 1:1 mcpvp.club Shield Stun mechanics and auto Paper config.
+commands:
+  mcpvpstuns:
+    description: Manage McPvpStuns plugin
+    aliases: [stuns, mcstuns]
+    permission: mcpvpstuns.admin
+permissions:
+  mcpvpstuns.admin:
+    description: Allows administrative commands for McPvpStuns
+    default: op

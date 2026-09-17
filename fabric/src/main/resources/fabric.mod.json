@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "id": "mcpvpstuns",
+  "version": "${version}",
+  "name": "McPvpStuns",
+  "description": "1:1 mcpvp.club shield stun mechanics with 1-tick cooldown and instant follow-up knockback.",
+  "authors": [
+    "PoggerCity"
+  ],
+  "contact": {
+    "homepage": "https://mcpvp.club/"
+  },
+  "license": "MIT",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "club.mcpvp.stuns.fabric.McPvpStunsFabric"
+    ]
+  },
+  "mixins": [
+    "mcpvpstuns.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.16.0",
+    "minecraft": ">=1.21",
+    "fabric-api": "*"
+  }
+}

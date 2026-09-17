@@ -1,0 +1,31 @@
+# ==========================================================
+# McPvpStuns Configuration
+# 1:1 mcpvp.club shield stun mechanics
+# ==========================================================
+
+# Automatically inspect and configure paper-global.yml on server startup
+auto-configure-paper-yml: true
+
+# Enable 1:1 mcpvp runtime shield stun & 1-tick follow-up mechanics
+runtime-stun-override: true
+
+# When shield is broken by axe:
+# 1. Defender shield cooldown in ticks (100 ticks = 5.0 seconds standard)
+shield-cooldown-ticks: 100
+
+# 2. Reset invulnerability ticks to 0 or 1 so attacker can land instant follow-up
+reset-invulnerability-on-break: true
+
+# 3. Apply knockback ONLY on the follow-up hit after shield breaks (or boost follow-up knockback)
+knockback-on-followup-only: true
+
+# Follow-up window in milliseconds to consider an attack as the stun-followup (e.g. 500ms = 10 ticks)
+followup-window-ms: 600
+
+# Optional custom knockback horizontal and vertical multiplier for the follow-up hit (1.0 = standard vanilla)
+followup-knockback-horizontal-multiplier: 1.0
+followup-knockback-vertical-multiplier: 1.0
+
+# Sound effects
+play-stun-sound: true
+play-slam-sound: true
