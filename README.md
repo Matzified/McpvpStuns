@@ -13,8 +13,8 @@
 
 ---
 
-> 🎉 **v1.0.0 — Initial Release**  
-> Initial release of McPvpStuns with Paper global config auto-patching and 1-tick hit detection support across Paper and Fabric.
+### v1.0.0 — Initial Release
+Initial release of McPvpStuns with Paper global config auto-patching and 1-tick hit detection support across Paper and Fabric.
 
 ---
 
